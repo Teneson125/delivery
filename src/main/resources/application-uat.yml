@@ -1,0 +1,28 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+  datasource:
+    url: jdbc:mysql://mysql-uat:3306/delivery_db?serverTimezone=Asia/Kolkata
+    username: root
+    password: Manoj2@@@
+    platform: mysql
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: redis-uat
+      port: 6379
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://uat.keycloak.zuufa.in/realms/zuufa
+
+keycloak:
+  service-auth:
+    enabled: true
+    token-url: https://uat.keycloak.zuufa.in/realms/zuufa/protocol/openid-connect/token
+    client-id: service
+    client-secret: XMSJcQr9x9cShxKmC1NLSyuzibQWotJh
+
+EUREKA_URL: 'http://uat-eureka:8761/eureka/'

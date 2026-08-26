@@ -1,0 +1,38 @@
+networks:
+  zuufa:
+    external: true
+  shared-db:
+    external: true
+
+services:
+  delivery:
+    container_name: delivery
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      EUREKA_URL: http://eureka:8761/eureka/
+      TZ: Asia/Kolkata
+    ports:
+      - "9092:8092"
+    networks:
+      - zuufa
+      - shared-db
+
+  uat-delivery:
+    container_name: uat-delivery
+    profiles: ["uat"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: uat
+      EUREKA_URL: http://uat-eureka:8761/eureka/
+      TZ: Asia/Kolkata
+    ports:
+      - "9192:8092"
+    networks:
+      - zuufa
+      - shared-db

@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: delivery-service
+  profiles:
+    active: local
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+server:
+  port: ${PORT}
+
+PORT: '8092'
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL}
+
+zuufa:
+  security:
+    application: ecommerce
+    tenant-enabled: true
+    tenant-header: X-Tenant-Id
