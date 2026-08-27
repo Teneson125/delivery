@@ -7,7 +7,7 @@
     <parent>
         <groupId>com.zuufa</groupId>
         <artifactId>parent</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.1</version>
     </parent>
 
     <artifactId>delivery-service</artifactId>
@@ -19,17 +19,17 @@
         <dependency>
             <groupId>com.zuufa</groupId>
             <artifactId>common</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>com.zuufa</groupId>
             <artifactId>exception</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>com.zuufa</groupId>
             <artifactId>security</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
