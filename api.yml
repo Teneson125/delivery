@@ -11,6 +11,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PACKAGES_TOKEN: ${PACKAGES_TOKEN}
     environment:
       SPRING_PROFILES_ACTIVE: prod
       EUREKA_URL: http://eureka:8761/eureka/
@@ -27,6 +29,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PACKAGES_TOKEN: ${PACKAGES_TOKEN}
     environment:
       SPRING_PROFILES_ACTIVE: uat
       EUREKA_URL: http://uat-eureka:8761/eureka/
