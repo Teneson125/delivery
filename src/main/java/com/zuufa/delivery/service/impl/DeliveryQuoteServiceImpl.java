@@ -16,17 +16,17 @@ import com.zuufa.delivery.repository.DeliveryProviderConfigRepository;
 import com.zuufa.delivery.repository.TenantDeliverySettingsRepository;
 import com.zuufa.delivery.repository.WarehouseRepository;
 import com.zuufa.delivery.service.DeliveryQuoteService;
-import com.zuufa.exception.BadRequestException;
-import com.zuufa.exception.NotFoundException;
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
 
     private final TenantDeliverySettingsRepository settingsRepository;
@@ -37,29 +37,43 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
     @Override
     public DeliveryQuoteResponse getQuotes(UUID tenantId, DeliveryQuoteRequest request) {
         TenantDeliverySettings settings = settingsRepository.findByTenantId(tenantId)
-                .orElseThrow(() -> new NotFoundException("Delivery settings not found"));
+                .orElse(null);
+        if (settings == null) {
+            return fallbackQuote();
+        }
         if (!settings.isEnabled()) {
-            return new DeliveryQuoteResponse("INR", List.of());
+            return fallbackQuote();
         }
         Warehouse warehouse = warehouseRepository.findByTenantIdAndDefaultWarehouseTrue(tenantId)
-                .orElseThrow(() -> new NotFoundException("Default warehouse not found"));
-        if (!warehouse.isActive()) {
-            throw new BadRequestException("Default warehouse is inactive");
+                .orElse(null);
+        if (warehouse == null || !warehouse.isActive()) {
+            log.info("Using delivery fallback because default warehouse is missing or inactive tenantId={}", tenantId);
         }
 
         BigDecimal subtotal = resolveSubtotal(request);
         DeliveryQuoteProviderRequest providerRequest = new DeliveryQuoteProviderRequest(tenantId, subtotal);
-        List<DeliveryQuoteOptionResponse> quotes = providerConfigRepository.findByTenantIdOrderByPriorityAsc(tenantId)
+        List<DeliveryProviderConfig> providerConfigs = providerConfigRepository.findByTenantIdOrderByPriorityAsc(tenantId);
+        List<DeliveryQuoteOptionResponse> quotes = providerConfigs
                 .stream()
                 .filter(DeliveryProviderConfig::isEnabled)
+                .filter(config -> config.getProvider() != DeliveryProviderCode.MANUAL || settings.isManualEnabled())
                 .map(config -> quoteProvider(settings, providerRequest, config))
                 .filter(DeliveryQuoteProviderResponse::serviceable)
-                .sorted(Comparator.comparing(DeliveryQuoteProviderResponse::amount))
+                .sorted(Comparator.comparing(
+                        DeliveryQuoteProviderResponse::amount,
+                        Comparator.nullsFirst(BigDecimal::compareTo)
+                ).reversed())
                 .map(response -> toOption(response, false))
                 .toList();
 
+        if (quotes.isEmpty()
+                && settings.isManualEnabled()
+                && providerConfigs.stream().noneMatch(config -> config.getProvider() == DeliveryProviderCode.MANUAL)) {
+            quotes = List.of(toOption(quoteProvider(settings, providerRequest, manualProviderConfig(tenantId)), false));
+        }
+
         if (quotes.isEmpty()) {
-            return new DeliveryQuoteResponse("INR", quotes);
+            return fallbackQuote();
         }
         DeliveryQuoteOptionResponse first = quotes.getFirst();
         List<DeliveryQuoteOptionResponse> marked = quotes.stream()
@@ -79,6 +93,15 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
         return new DeliveryQuoteResponse("INR", marked);
     }
 
+    private DeliveryProviderConfig manualProviderConfig(UUID tenantId) {
+        DeliveryProviderConfig config = new DeliveryProviderConfig();
+        config.setTenantId(tenantId);
+        config.setProvider(DeliveryProviderCode.MANUAL);
+        config.setEnabled(true);
+        config.setPriority(1);
+        return config;
+    }
+
     private DeliveryQuoteProviderResponse quoteProvider(
             TenantDeliverySettings settings,
             DeliveryQuoteProviderRequest request,
@@ -93,7 +116,21 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                 settings.getManualEstimatedMinDays(),
                 settings.getManualEstimatedMaxDays()
         );
-        return providerFactory.getProvider(config.getProvider()).quote(request, context);
+        try {
+            return providerFactory.getProvider(config.getProvider()).quote(request, context);
+        } catch (RuntimeException error) {
+            log.warn("Ignoring delivery provider quote failure tenantId={} provider={}", settings.getTenantId(), config.getProvider(), error);
+            return new DeliveryQuoteProviderResponse(
+                    config.getProvider(),
+                    "Delivery",
+                    BigDecimal.ZERO,
+                    false,
+                    0,
+                    0,
+                    false,
+                    null
+            );
+        }
     }
 
     private DeliveryQuoteOptionResponse toOption(DeliveryQuoteProviderResponse response, boolean recommended) {
@@ -109,6 +146,21 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                 recommended,
                 response.message()
         );
+    }
+
+    private DeliveryQuoteResponse fallbackQuote() {
+        return new DeliveryQuoteResponse("INR", List.of(new DeliveryQuoteOptionResponse(
+                DeliveryProviderCode.MANUAL.name().toLowerCase() + "-" + UUID.randomUUID(),
+                DeliveryProviderCode.MANUAL,
+                "Delivery",
+                BigDecimal.ZERO,
+                false,
+                0,
+                0,
+                true,
+                true,
+                null
+        )));
     }
 
     private BigDecimal resolveSubtotal(DeliveryQuoteRequest request) {
