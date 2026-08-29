@@ -51,7 +51,12 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
         }
 
         BigDecimal subtotal = resolveSubtotal(request);
-        DeliveryQuoteProviderRequest providerRequest = new DeliveryQuoteProviderRequest(tenantId, subtotal);
+        DeliveryQuoteProviderRequest providerRequest = new DeliveryQuoteProviderRequest(
+                tenantId,
+                subtotal,
+                request.items(),
+                request.deliveryAddress()
+        );
         List<DeliveryProviderConfig> providerConfigs = providerConfigRepository.findByTenantIdOrderByPriorityAsc(tenantId);
         List<DeliveryQuoteOptionResponse> quotes = providerConfigs
                 .stream()
@@ -111,6 +116,7 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                 settings.getTenantId(),
                 config.getEncryptedCredentials(),
                 config.getSettingsJson(),
+                warehouse == null ? null : warehouse.getPincode(),
                 settings.getManualFixedCharge(),
                 settings.getManualFreeDeliveryAbove(),
                 settings.getManualEstimatedMinDays(),

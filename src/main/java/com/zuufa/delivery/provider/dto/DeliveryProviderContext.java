@@ -7,6 +7,7 @@ public record DeliveryProviderContext(
         UUID tenantId,
         String encryptedCredentials,
         String settingsJson,
+        String pickupPincode,
         BigDecimal manualFixedCharge,
         BigDecimal manualFreeDeliveryAbove,
         int manualEstimatedMinDays,
