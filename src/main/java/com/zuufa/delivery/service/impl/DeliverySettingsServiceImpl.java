@@ -10,6 +10,7 @@ import com.zuufa.delivery.entity.DeliveryProviderConfig;
 import com.zuufa.delivery.entity.TenantDeliverySettings;
 import com.zuufa.delivery.entity.Warehouse;
 import com.zuufa.delivery.enums.DeliveryProviderCode;
+import com.zuufa.delivery.enums.DeliveryPricingStrategy;
 import com.zuufa.delivery.repository.DeliveryProviderConfigRepository;
 import com.zuufa.delivery.repository.TenantDeliverySettingsRepository;
 import com.zuufa.delivery.repository.WarehouseRepository;
@@ -36,6 +37,10 @@ public class DeliverySettingsServiceImpl implements DeliverySettingsService {
     public DeliverySettingsResponse getSettings(UUID tenantId) {
         TenantDeliverySettings settings = settingsRepository.findByTenantId(tenantId)
                 .orElseGet(() -> settingsRepository.save(defaultSettings(tenantId)));
+        if (settings.getPricingStrategy() == null) {
+            settings.setPricingStrategy(DeliveryPricingStrategy.HIGHEST);
+            settingsRepository.save(settings);
+        }
         ensureDefaultProviderConfigs(tenantId);
         return toResponse(settings);
     }
@@ -50,6 +55,9 @@ public class DeliverySettingsServiceImpl implements DeliverySettingsService {
                 .orElseGet(() -> defaultSettings(tenantId));
         settings.setEnabled(request.enabled());
         settings.setDefaultProvider(request.defaultProvider());
+        settings.setPricingStrategy(request.pricingStrategy() == null
+                ? DeliveryPricingStrategy.HIGHEST
+                : request.pricingStrategy());
         settings.setManualEnabled(request.manual().enabled());
         settings.setManualFixedCharge(request.manual().fixedCharge());
         settings.setManualFreeDeliveryAbove(request.manual().freeDeliveryAbove());
@@ -122,6 +130,7 @@ public class DeliverySettingsServiceImpl implements DeliverySettingsService {
                 settings.getTenantId(),
                 settings.isEnabled(),
                 settings.getDefaultProvider(),
+                settings.getPricingStrategy() == null ? DeliveryPricingStrategy.HIGHEST : settings.getPricingStrategy(),
                 new ManualDeliverySettingsResponse(
                         settings.isManualEnabled(),
                         settings.getManualFixedCharge(),
