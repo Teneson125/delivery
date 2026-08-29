@@ -112,7 +112,14 @@ public class ShipmentServiceImpl implements ShipmentService {
         }
         Shipment shipment = shipmentRepository.findByTenantIdAndOrderId(tenantId, orderId)
                 .orElseGet(() -> newShipment(tenantId, orderId, request.provider()));
+        if (shipment.isFulfillmentConfirmed() && shipment.getProvider() != request.provider()) {
+            throw new BadRequestException("Delivery provider cannot be changed after confirmation");
+        }
+        if (shipment.isFulfillmentConfirmed() && shipment.getProvider() != DeliveryProviderCode.MANUAL) {
+            throw new BadRequestException("Automated delivery status is updated by the provider");
+        }
         shipment.setProvider(request.provider());
+        shipment.setFulfillmentConfirmed(true);
         shipment.setStatus(request.status() == null ? ShipmentStatus.READY_TO_SHIP : request.status());
         shipment.setTrackingNumber(trimToNull(request.trackingNumber()));
         shipment.setTrackingUrl(trimToNull(request.trackingUrl()));
@@ -128,6 +135,9 @@ public class ShipmentServiceImpl implements ShipmentService {
     @Transactional
     public ShipmentResponse updateStatus(UUID tenantId, UUID shipmentId, ShipmentStatusRequest request) {
         Shipment shipment = findShipment(tenantId, shipmentId);
+        if (shipment.getProvider() != DeliveryProviderCode.MANUAL) {
+            throw new BadRequestException("Automated delivery status is updated by the provider");
+        }
         shipment.setStatus(request.status());
         Shipment saved = shipmentRepository.save(shipment);
         addEvent(saved.getId(), request.status(), request.message());
@@ -201,6 +211,7 @@ public class ShipmentServiceImpl implements ShipmentService {
                 shipment.getTenantId(),
                 shipment.getOrderId(),
                 shipment.getProvider(),
+                shipment.isFulfillmentConfirmed(),
                 shipment.getProviderShipmentId(),
                 shipment.getAwbNumber(),
                 shipment.getTrackingNumber(),

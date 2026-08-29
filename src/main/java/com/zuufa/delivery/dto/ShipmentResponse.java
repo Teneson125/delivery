@@ -12,6 +12,7 @@ public record ShipmentResponse(
         UUID tenantId,
         UUID orderId,
         DeliveryProviderCode provider,
+        boolean fulfillmentConfirmed,
         String providerShipmentId,
         String awbNumber,
         String trackingNumber,
