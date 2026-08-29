@@ -18,7 +18,7 @@ import com.zuufa.delivery.repository.ShipmentRepository;
 import com.zuufa.delivery.repository.DeliveryProviderConfigRepository;
 import com.zuufa.delivery.service.ShipmentService;
 import com.zuufa.exception.BadRequestException;
-import jakarta.persistence.EntityNotFoundException;
+import com.zuufa.exception.NotFoundException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -167,12 +167,12 @@ public class ShipmentServiceImpl implements ShipmentService {
 
     private Shipment findShipment(UUID tenantId, UUID shipmentId) {
         return shipmentRepository.findByTenantIdAndId(tenantId, shipmentId)
-                .orElseThrow(() -> new EntityNotFoundException("Shipment not found"));
+                .orElseThrow(() -> new NotFoundException("Shipment not found"));
     }
 
     private Shipment findShipmentByOrder(UUID tenantId, UUID orderId) {
         return shipmentRepository.findByTenantIdAndOrderId(tenantId, orderId)
-                .orElseThrow(() -> new EntityNotFoundException("Shipment not found"));
+                .orElseThrow(() -> new NotFoundException("Shipment not found"));
     }
 
     private Shipment newShipment(UUID tenantId, UUID orderId, DeliveryProviderCode provider) {
