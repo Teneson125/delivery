@@ -37,6 +37,9 @@ public class Shipment extends AbstractAuditEntity {
     @Column(nullable = false, length = 64)
     private DeliveryProviderCode provider;
 
+    @Column(name = "fulfillment_confirmed", nullable = false)
+    private boolean fulfillmentConfirmed = false;
+
     @Column(name = "provider_shipment_id")
     private String providerShipmentId;
 
