@@ -20,6 +20,8 @@ import com.zuufa.delivery.service.ShipmentService;
 import com.zuufa.exception.BadRequestException;
 import com.zuufa.exception.NotFoundException;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -118,11 +120,12 @@ public class ShipmentServiceImpl implements ShipmentService {
         if (shipment.isFulfillmentConfirmed() && shipment.getProvider() != DeliveryProviderCode.MANUAL) {
             throw new BadRequestException("Automated delivery status is updated by the provider");
         }
+        String trackingUrl = validateTrackingUrl(request.trackingUrl());
         shipment.setProvider(request.provider());
         shipment.setFulfillmentConfirmed(true);
         shipment.setStatus(request.status() == null ? ShipmentStatus.READY_TO_SHIP : request.status());
         shipment.setTrackingNumber(trimToNull(request.trackingNumber()));
-        shipment.setTrackingUrl(trimToNull(request.trackingUrl()));
+        shipment.setTrackingUrl(trackingUrl);
         shipment.setNote(trimToNull(request.note()));
         shipment.setEstimatedDeliveryDate(request.estimatedDeliveryDate());
 
@@ -264,6 +267,24 @@ public class ShipmentServiceImpl implements ShipmentService {
             return null;
         }
         return value.trim();
+    }
+
+    private String validateTrackingUrl(String value) {
+        String trackingUrl = trimToNull(value);
+        if (trackingUrl == null) {
+            return null;
+        }
+        try {
+            URI uri = new URI(trackingUrl);
+            String scheme = uri.getScheme();
+            if (("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && StringUtils.hasText(uri.getHost())) {
+                return trackingUrl;
+            }
+        } catch (URISyntaxException ignored) {
+            // handled by the validation error below
+        }
+        throw new BadRequestException("Tracking URL must start with http:// or https://");
     }
 
     private String eventMessage(Shipment shipment) {
