@@ -2,6 +2,7 @@ package com.zuufa.delivery.entity;
 
 import com.zuufa.common.entity.AbstractAuditEntity;
 import com.zuufa.delivery.enums.DeliveryProviderCode;
+import com.zuufa.delivery.enums.DeliveryPricingStrategy;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -31,6 +32,10 @@ public class TenantDeliverySettings extends AbstractAuditEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "default_provider", nullable = false, length = 64)
     private DeliveryProviderCode defaultProvider = DeliveryProviderCode.MANUAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pricing_strategy", length = 32)
+    private DeliveryPricingStrategy pricingStrategy = DeliveryPricingStrategy.HIGHEST;
 
     @Column(name = "manual_enabled", nullable = false)
     private boolean manualEnabled = true;

@@ -8,6 +8,7 @@ import com.zuufa.delivery.entity.DeliveryProviderConfig;
 import com.zuufa.delivery.entity.TenantDeliverySettings;
 import com.zuufa.delivery.entity.Warehouse;
 import com.zuufa.delivery.enums.DeliveryProviderCode;
+import com.zuufa.delivery.enums.DeliveryPricingStrategy;
 import com.zuufa.delivery.provider.DeliveryProviderFactory;
 import com.zuufa.delivery.provider.dto.DeliveryProviderContext;
 import com.zuufa.delivery.provider.dto.DeliveryQuoteProviderRequest;
@@ -62,19 +63,16 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                 .stream()
                 .filter(DeliveryProviderConfig::isEnabled)
                 .filter(config -> config.getProvider() != DeliveryProviderCode.MANUAL || settings.isManualEnabled())
-                .map(config -> quoteProvider(settings, providerRequest, config))
+                .map(config -> quoteProvider(settings, warehouse, providerRequest, config))
                 .filter(DeliveryQuoteProviderResponse::serviceable)
-                .sorted(Comparator.comparing(
-                        DeliveryQuoteProviderResponse::amount,
-                        Comparator.nullsFirst(BigDecimal::compareTo)
-                ).reversed())
+                .sorted(quoteComparator(settings))
                 .map(response -> toOption(response, false))
                 .toList();
 
         if (quotes.isEmpty()
                 && settings.isManualEnabled()
                 && providerConfigs.stream().noneMatch(config -> config.getProvider() == DeliveryProviderCode.MANUAL)) {
-            quotes = List.of(toOption(quoteProvider(settings, providerRequest, manualProviderConfig(tenantId)), false));
+            quotes = List.of(toOption(quoteProvider(settings, warehouse, providerRequest, manualProviderConfig(tenantId)), false));
         }
 
         if (quotes.isEmpty()) {
@@ -109,6 +107,7 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
 
     private DeliveryQuoteProviderResponse quoteProvider(
             TenantDeliverySettings settings,
+            Warehouse warehouse,
             DeliveryQuoteProviderRequest request,
             DeliveryProviderConfig config
     ) {
@@ -152,6 +151,14 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                 recommended,
                 response.message()
         );
+    }
+
+    private Comparator<DeliveryQuoteProviderResponse> quoteComparator(TenantDeliverySettings settings) {
+        Comparator<DeliveryQuoteProviderResponse> comparator = Comparator.comparing(
+                DeliveryQuoteProviderResponse::amount,
+                Comparator.nullsLast(BigDecimal::compareTo)
+        );
+        return settings.getPricingStrategy() == DeliveryPricingStrategy.LOWEST ? comparator : comparator.reversed();
     }
 
     private DeliveryQuoteResponse fallbackQuote() {
