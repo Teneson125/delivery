@@ -8,6 +8,7 @@ import com.zuufa.delivery.provider.dto.CreateShipmentProviderRequest;
 import com.zuufa.delivery.provider.dto.DeliveryProviderContext;
 import com.zuufa.delivery.provider.dto.DeliveryQuoteProviderRequest;
 import com.zuufa.delivery.provider.dto.DeliveryQuoteProviderResponse;
+import com.zuufa.delivery.provider.dto.ShipmentLabelProviderResponse;
 import com.zuufa.delivery.provider.dto.ShipmentProviderResponse;
 import com.zuufa.delivery.provider.dto.TrackShipmentProviderRequest;
 import com.zuufa.delivery.provider.dto.TrackingProviderResponse;
@@ -122,6 +123,33 @@ public class EkartDeliveryProvider implements DeliveryProvider {
     }
 
     @Override
+    public ShipmentLabelProviderResponse label(TrackShipmentProviderRequest request, DeliveryProviderContext context) {
+        if (!authClient.canAuthenticate(context)) {
+            return new ShipmentLabelProviderResponse(null, false, "Ekart labels are not enabled yet.", Map.of());
+        }
+
+        if (!StringUtils.hasText(request.providerShipmentId())) {
+            return new ShipmentLabelProviderResponse(null, false, "Ekart tracking id is missing.", Map.of());
+        }
+
+        try {
+            EkartCredentials credentials = parseCredentials(context);
+            Map<String, Object> response = apiClient.downloadLabel(
+                    authClient.getAuthorizationHeader(context, credentials),
+                    List.of(request.providerShipmentId())
+            );
+            return new ShipmentLabelProviderResponse(
+                    extractLabelUrl(response),
+                    true,
+                    "Ekart label received.",
+                    response == null ? Map.of() : response
+            );
+        } catch (RuntimeException error) {
+            return new ShipmentLabelProviderResponse(null, false, "Ekart label is unavailable.", Map.of());
+        }
+    }
+
+    @Override
     public TrackingProviderResponse track(TrackShipmentProviderRequest request, DeliveryProviderContext context) {
         if (!authClient.canAuthenticate(context)) {
             return new TrackingProviderResponse("EKART_NOT_CONFIGURED", "Ekart tracking is not enabled yet.");
@@ -232,6 +260,28 @@ public class EkartDeliveryProvider implements DeliveryProvider {
 
     private String firstText(String first, String second) {
         return StringUtils.hasText(first) ? first : second;
+    }
+
+    private String extractLabelUrl(Map<String, Object> response) {
+        if (response == null || response.isEmpty()) {
+            return null;
+        }
+        Object directUrl = response.get("label_url");
+        if (directUrl == null) {
+            directUrl = response.get("labelUrl");
+        }
+        if (directUrl != null && StringUtils.hasText(directUrl.toString())) {
+            return directUrl.toString();
+        }
+        Object labels = response.get("labels");
+        if (labels instanceof List<?> labelList && !labelList.isEmpty() && labelList.getFirst() instanceof Map<?, ?> firstLabel) {
+            Object labelUrl = firstLabel.get("label_url");
+            if (labelUrl == null) {
+                labelUrl = firstLabel.get("labelUrl");
+            }
+            return labelUrl == null ? null : labelUrl.toString();
+        }
+        return null;
     }
 
     private record PackageMetrics(int weightGrams, int lengthCm, int heightCm, int widthCm) {

@@ -3,6 +3,7 @@ package com.zuufa.delivery.service;
 import com.zuufa.delivery.dto.CreateShipmentRequest;
 import com.zuufa.delivery.dto.DeliveryFulfillmentOptionsResponse;
 import com.zuufa.delivery.dto.DeliveryFulfillmentRequest;
+import com.zuufa.delivery.dto.ShipmentLabelResponse;
 import com.zuufa.delivery.dto.ShipmentResponse;
 import com.zuufa.delivery.dto.ShipmentStatusRequest;
 import com.zuufa.delivery.dto.TrackingResponse;
@@ -17,5 +18,6 @@ public interface ShipmentService {
     DeliveryFulfillmentOptionsResponse getDeliveryOptions(UUID tenantId);
     ShipmentResponse updateFulfillment(UUID tenantId, UUID orderId, DeliveryFulfillmentRequest request);
     ShipmentResponse updateStatus(UUID tenantId, UUID shipmentId, ShipmentStatusRequest request);
+    ShipmentLabelResponse getLabel(UUID tenantId, UUID shipmentId);
     TrackingResponse track(UUID tenantId, UUID shipmentId);
 }

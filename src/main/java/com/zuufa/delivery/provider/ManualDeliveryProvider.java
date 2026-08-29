@@ -5,10 +5,12 @@ import com.zuufa.delivery.provider.dto.CreateShipmentProviderRequest;
 import com.zuufa.delivery.provider.dto.DeliveryProviderContext;
 import com.zuufa.delivery.provider.dto.DeliveryQuoteProviderRequest;
 import com.zuufa.delivery.provider.dto.DeliveryQuoteProviderResponse;
+import com.zuufa.delivery.provider.dto.ShipmentLabelProviderResponse;
 import com.zuufa.delivery.provider.dto.ShipmentProviderResponse;
 import com.zuufa.delivery.provider.dto.TrackShipmentProviderRequest;
 import com.zuufa.delivery.provider.dto.TrackingProviderResponse;
 import java.math.BigDecimal;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -42,6 +44,11 @@ public class ManualDeliveryProvider implements DeliveryProvider {
     @Override
     public ShipmentProviderResponse createShipment(CreateShipmentProviderRequest request, DeliveryProviderContext context) {
         return new ShipmentProviderResponse(null, null, "READY_TO_SHIP");
+    }
+
+    @Override
+    public ShipmentLabelProviderResponse label(TrackShipmentProviderRequest request, DeliveryProviderContext context) {
+        return new ShipmentLabelProviderResponse(null, false, "Manual delivery does not have a provider label.", Map.of());
     }
 
     @Override
