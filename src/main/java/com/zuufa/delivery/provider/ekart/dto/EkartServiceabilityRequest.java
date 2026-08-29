@@ -1,8 +1,15 @@
 package com.zuufa.delivery.provider.ekart.dto;
 
 public record EkartServiceabilityRequest(
-        String pickupPostalCode,
-        String deliveryPostalCode,
-        long weightInGrams
+        String pickupPincode,
+        String dropPincode,
+        String length,
+        String height,
+        String width,
+        String weight,
+        String paymentType,
+        String serviceType,
+        String codAmount,
+        String invoiceAmount
 ) {
 }

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "delivery.providers.ekart")
 public class EkartDeliveryProperties {
 
-    private String baseUrl = "";
+    private String baseUrl = "https://app.elite.ekartlogistics.in";
     private boolean sandbox = true;
     private boolean liveCallsEnabled = false;
 }
