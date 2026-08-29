@@ -3,6 +3,7 @@ package com.zuufa.delivery.dto;
 import com.zuufa.delivery.enums.DeliveryProviderCode;
 import com.zuufa.delivery.enums.ShipmentStatus;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -14,6 +15,9 @@ public record ShipmentResponse(
         String providerShipmentId,
         String awbNumber,
         String trackingNumber,
+        String trackingUrl,
+        String note,
+        LocalDate estimatedDeliveryDate,
         ShipmentStatus status,
         BigDecimal deliveryCharge,
         String currency,

@@ -10,6 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
@@ -44,6 +45,15 @@ public class Shipment extends AbstractAuditEntity {
 
     @Column(name = "tracking_number")
     private String trackingNumber;
+
+    @Column(name = "tracking_url")
+    private String trackingUrl;
+
+    @Column(name = "delivery_note", length = 1000)
+    private String note;
+
+    @Column(name = "estimated_delivery_date")
+    private LocalDate estimatedDeliveryDate;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 64)

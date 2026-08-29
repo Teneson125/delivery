@@ -6,6 +6,8 @@ import static com.zuufa.common.authorization.ApplicationPermission.READ_SHIPMENT
 import static com.zuufa.common.authorization.ApplicationPermission.TRACK_SHIPMENT;
 
 import com.zuufa.delivery.dto.CreateShipmentRequest;
+import com.zuufa.delivery.dto.DeliveryFulfillmentOptionsResponse;
+import com.zuufa.delivery.dto.DeliveryFulfillmentRequest;
 import com.zuufa.delivery.dto.ShipmentResponse;
 import com.zuufa.delivery.dto.ShipmentStatusRequest;
 import com.zuufa.delivery.dto.TrackingResponse;
@@ -55,6 +57,34 @@ public class ShipmentController {
             @PathVariable UUID shipmentId
     ) {
         return shipmentService.getShipment(tenantId, shipmentId);
+    }
+
+    @GetMapping("/orders/{orderId}")
+    // @RequiredPermission(READ_SHIPMENT)
+    public ShipmentResponse getShipmentByOrder(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @PathVariable UUID orderId
+    ) {
+        return shipmentService.getShipmentByOrderId(tenantId, orderId);
+    }
+
+    @GetMapping("/orders/{orderId}/delivery-options")
+    // @RequiredPermission(READ_SHIPMENT)
+    public DeliveryFulfillmentOptionsResponse getDeliveryOptions(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @PathVariable UUID orderId
+    ) {
+        return shipmentService.getDeliveryOptions(tenantId);
+    }
+
+    @PostMapping("/orders/{orderId}/delivery-fulfillment")
+    // @RequiredPermission(CREATE_SHIPMENT)
+    public ShipmentResponse updateFulfillment(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @PathVariable UUID orderId,
+            @Valid @RequestBody DeliveryFulfillmentRequest request
+    ) {
+        return shipmentService.updateFulfillment(tenantId, orderId, request);
     }
 
     @PatchMapping("/{shipmentId}/status")
