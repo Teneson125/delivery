@@ -8,6 +8,7 @@ import static com.zuufa.common.authorization.ApplicationPermission.TRACK_SHIPMEN
 import com.zuufa.delivery.dto.CreateShipmentRequest;
 import com.zuufa.delivery.dto.DeliveryFulfillmentOptionsResponse;
 import com.zuufa.delivery.dto.DeliveryFulfillmentRequest;
+import com.zuufa.delivery.dto.ShipmentLabelResponse;
 import com.zuufa.delivery.dto.ShipmentResponse;
 import com.zuufa.delivery.dto.ShipmentStatusRequest;
 import com.zuufa.delivery.dto.TrackingResponse;
@@ -95,6 +96,15 @@ public class ShipmentController {
             @Valid @RequestBody ShipmentStatusRequest request
     ) {
         return shipmentService.updateStatus(tenantId, shipmentId, request);
+    }
+
+    @GetMapping("/{shipmentId}/label")
+    // @RequiredPermission(READ_SHIPMENT)
+    public ShipmentLabelResponse getLabel(
+            @RequestHeader("X-Tenant-Id") UUID tenantId,
+            @PathVariable UUID shipmentId
+    ) {
+        return shipmentService.getLabel(tenantId, shipmentId);
     }
 
     @GetMapping("/{shipmentId}/tracking")

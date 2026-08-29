@@ -5,6 +5,7 @@ import com.zuufa.delivery.dto.DeliveryFulfillmentOptionResponse;
 import com.zuufa.delivery.dto.DeliveryFulfillmentOptionsResponse;
 import com.zuufa.delivery.dto.DeliveryFulfillmentRequest;
 import com.zuufa.delivery.dto.ShipmentEventResponse;
+import com.zuufa.delivery.dto.ShipmentLabelResponse;
 import com.zuufa.delivery.dto.ShipmentResponse;
 import com.zuufa.delivery.dto.ShipmentStatusRequest;
 import com.zuufa.delivery.dto.TrackingResponse;
@@ -13,6 +14,10 @@ import com.zuufa.delivery.entity.Shipment;
 import com.zuufa.delivery.entity.ShipmentEvent;
 import com.zuufa.delivery.enums.DeliveryProviderCode;
 import com.zuufa.delivery.enums.ShipmentStatus;
+import com.zuufa.delivery.provider.DeliveryProviderFactory;
+import com.zuufa.delivery.provider.dto.DeliveryProviderContext;
+import com.zuufa.delivery.provider.dto.ShipmentLabelProviderResponse;
+import com.zuufa.delivery.provider.dto.TrackShipmentProviderRequest;
 import com.zuufa.delivery.repository.ShipmentEventRepository;
 import com.zuufa.delivery.repository.ShipmentRepository;
 import com.zuufa.delivery.repository.DeliveryProviderConfigRepository;
@@ -35,15 +40,18 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final ShipmentRepository shipmentRepository;
     private final ShipmentEventRepository shipmentEventRepository;
     private final DeliveryProviderConfigRepository providerConfigRepository;
+    private final DeliveryProviderFactory providerFactory;
 
     public ShipmentServiceImpl(
             ShipmentRepository shipmentRepository,
             ShipmentEventRepository shipmentEventRepository,
-            DeliveryProviderConfigRepository providerConfigRepository
+            DeliveryProviderConfigRepository providerConfigRepository,
+            DeliveryProviderFactory providerFactory
     ) {
         this.shipmentRepository = shipmentRepository;
         this.shipmentEventRepository = shipmentEventRepository;
         this.providerConfigRepository = providerConfigRepository;
+        this.providerFactory = providerFactory;
     }
 
     @Override
@@ -145,6 +153,24 @@ public class ShipmentServiceImpl implements ShipmentService {
         Shipment saved = shipmentRepository.save(shipment);
         addEvent(saved.getId(), request.status(), request.message());
         return toResponse(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ShipmentLabelResponse getLabel(UUID tenantId, UUID shipmentId) {
+        Shipment shipment = findShipment(tenantId, shipmentId);
+        ShipmentLabelProviderResponse label = providerFactory.getProvider(shipment.getProvider()).label(
+                new TrackShipmentProviderRequest(tenantId, shipment.getProviderShipmentId(), shipment.getTrackingNumber()),
+                providerContext(tenantId, shipment.getProvider())
+        );
+        return new ShipmentLabelResponse(
+                shipment.getId(),
+                shipment.getProvider(),
+                label.labelUrl(),
+                label.available(),
+                label.message(),
+                label.data()
+        );
     }
 
     @Override
@@ -260,6 +286,24 @@ public class ShipmentServiceImpl implements ShipmentService {
                 .filter(DeliveryProviderConfig::isEnabled)
                 .filter(config -> config.getEncryptedCredentials() != null)
                 .isPresent();
+    }
+
+    private DeliveryProviderContext providerContext(UUID tenantId, DeliveryProviderCode provider) {
+        DeliveryProviderConfig config = providerConfigRepository.findByTenantIdAndProvider(tenantId, provider)
+                .orElse(null);
+        if (config == null) {
+            return new DeliveryProviderContext(tenantId, null, null, null, BigDecimal.ZERO, null, 0, 0);
+        }
+        return new DeliveryProviderContext(
+                tenantId,
+                config.getEncryptedCredentials(),
+                config.getSettingsJson(),
+                null,
+                BigDecimal.ZERO,
+                null,
+                0,
+                0
+        );
     }
 
     private String trimToNull(String value) {

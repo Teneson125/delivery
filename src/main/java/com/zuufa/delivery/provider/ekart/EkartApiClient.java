@@ -55,6 +55,19 @@ public class EkartApiClient {
                 .body(EkartShipmentResponse.class);
     }
 
+    public Map<String, Object> downloadLabel(String authorization, List<String> trackingIds) {
+        return client().post()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/v1/package/label")
+                        .queryParam("json_only", true)
+                        .build())
+                .header(HttpHeaders.AUTHORIZATION, authorization)
+                .body(Map.of("ids", trackingIds))
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {
+                });
+    }
+
     public void cancel(String authorization, String trackingId) {
         client().delete()
                 .uri(uriBuilder -> uriBuilder
