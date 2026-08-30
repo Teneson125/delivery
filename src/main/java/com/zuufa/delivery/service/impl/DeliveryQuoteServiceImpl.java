@@ -64,6 +64,7 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                 .filter(DeliveryProviderConfig::isEnabled)
                 .filter(config -> config.getProvider() != DeliveryProviderCode.MANUAL || settings.isManualEnabled())
                 .map(config -> quoteProvider(settings, warehouse, providerRequest, config))
+                .peek(response -> logSkippedProvider(settings.getTenantId(), response))
                 .filter(DeliveryQuoteProviderResponse::serviceable)
                 .sorted(quoteComparator(settings))
                 .map(response -> toOption(response, false))
@@ -149,6 +150,18 @@ public class DeliveryQuoteServiceImpl implements DeliveryQuoteService {
                 response.estimatedMaxDays(),
                 response.serviceable(),
                 recommended,
+                response.message()
+        );
+    }
+
+    private void logSkippedProvider(UUID tenantId, DeliveryQuoteProviderResponse response) {
+        if (response.serviceable()) {
+            return;
+        }
+        log.info(
+                "Skipping unavailable delivery quote tenantId={} provider={} reason={}",
+                tenantId,
+                response.provider(),
                 response.message()
         );
     }
