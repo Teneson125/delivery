@@ -15,8 +15,10 @@ import com.zuufa.delivery.entity.ShipmentEvent;
 import com.zuufa.delivery.enums.DeliveryProviderCode;
 import com.zuufa.delivery.enums.ShipmentStatus;
 import com.zuufa.delivery.provider.DeliveryProviderFactory;
+import com.zuufa.delivery.provider.dto.CreateShipmentProviderRequest;
 import com.zuufa.delivery.provider.dto.DeliveryProviderContext;
 import com.zuufa.delivery.provider.dto.ShipmentLabelProviderResponse;
+import com.zuufa.delivery.provider.dto.ShipmentProviderResponse;
 import com.zuufa.delivery.provider.dto.TrackShipmentProviderRequest;
 import com.zuufa.delivery.repository.ShipmentEventRepository;
 import com.zuufa.delivery.repository.ShipmentRepository;
@@ -199,8 +201,32 @@ public class ShipmentServiceImpl implements ShipmentService {
         shipment.setEstimatedMinDays(request.estimatedMinDays());
         shipment.setEstimatedMaxDays(request.estimatedMaxDays());
 
+        if (shipment.getProvider() != DeliveryProviderCode.MANUAL) {
+            ShipmentProviderResponse providerResponse = providerFactory.getProvider(shipment.getProvider()).createShipment(
+                    new CreateShipmentProviderRequest(
+                            tenantId,
+                            request.orderId(),
+                            request.subtotal(),
+                            request.items() == null ? List.of() : request.items(),
+                            request.deliveryAddress()
+                    ),
+                    providerContext(tenantId, shipment.getProvider())
+            );
+            if (!StringUtils.hasText(providerResponse.providerShipmentId())
+                    && !StringUtils.hasText(providerResponse.trackingNumber())) {
+                throw new BadRequestException("Unable to create " + displayName(shipment.getProvider()) + " shipment");
+            }
+            shipment.setProviderShipmentId(trimToNull(providerResponse.providerShipmentId()));
+            shipment.setTrackingNumber(trimToNull(providerResponse.trackingNumber()));
+            shipment.setAwbNumber(trimToNull(providerResponse.trackingNumber()));
+            shipment.setFulfillmentConfirmed(true);
+            shipment.setStatus(toShipmentStatus(providerResponse.status()));
+        }
+
         Shipment saved = shipmentRepository.save(shipment);
-        addEvent(saved.getId(), saved.getStatus(), "Shipment is ready for delivery.");
+        addEvent(saved.getId(), saved.getStatus(), shipment.getProvider() == DeliveryProviderCode.MANUAL
+                ? "Shipment is ready for delivery."
+                : displayName(saved.getProvider()) + " shipment created.");
         return toResponse(saved);
     }
 
@@ -336,5 +362,16 @@ public class ShipmentServiceImpl implements ShipmentService {
             return shipment.getNote();
         }
         return displayName(shipment.getProvider()) + " fulfillment updated.";
+    }
+
+    private ShipmentStatus toShipmentStatus(String providerStatus) {
+        if (!StringUtils.hasText(providerStatus)) {
+            return ShipmentStatus.READY_TO_SHIP;
+        }
+        try {
+            return ShipmentStatus.valueOf(providerStatus.trim().toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            return ShipmentStatus.READY_TO_SHIP;
+        }
     }
 }

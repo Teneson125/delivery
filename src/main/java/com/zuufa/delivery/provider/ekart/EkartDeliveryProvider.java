@@ -17,6 +17,7 @@ import com.zuufa.delivery.provider.ekart.dto.EkartEstimateRequest;
 import com.zuufa.delivery.provider.ekart.dto.EkartEstimateResponse;
 import com.zuufa.delivery.provider.ekart.dto.EkartServiceabilityRequest;
 import com.zuufa.delivery.provider.ekart.dto.EkartServiceabilityV3Response;
+import com.zuufa.delivery.provider.ekart.dto.EkartShipmentResponse;
 import com.zuufa.delivery.provider.ekart.dto.EkartSettings;
 import java.math.BigDecimal;
 import java.util.List;
@@ -119,7 +120,44 @@ public class EkartDeliveryProvider implements DeliveryProvider {
             return new ShipmentProviderResponse(null, null, "EKART_NOT_CONFIGURED");
         }
 
-        return new ShipmentProviderResponse(null, null, "EKART_SHIPMENT_DETAILS_REQUIRED");
+        try {
+            EkartCredentials credentials = parseCredentials(context);
+            EkartSettings settings = parseSettings(context);
+            String pickupAddressId = settings.pickupAddressAlias();
+            String dropPincode = request.deliveryAddress() == null ? "" : onlyDigits(request.deliveryAddress().pincode());
+            if (!StringUtils.hasText(pickupAddressId) || !StringUtils.hasText(dropPincode)) {
+                return new ShipmentProviderResponse(null, null, "EKART_SHIPMENT_DETAILS_REQUIRED");
+            }
+
+            PackageMetrics metrics = packageMetrics(new DeliveryQuoteProviderRequest(
+                    request.tenantId(),
+                    request.subtotal() == null ? BigDecimal.ZERO : request.subtotal(),
+                    request.items() == null ? List.of() : request.items(),
+                    request.deliveryAddress()
+            ));
+            Map<String, Object> payload = Map.of(
+                    "order_id", request.orderId().toString(),
+                    "pickup_address_id", pickupAddressId,
+                    "delivery_postal_code", dropPincode,
+                    "payment_mode", paymentMode(settings),
+                    "service_type", serviceType(settings),
+                    "weight", metrics.weightGrams(),
+                    "length", metrics.lengthCm(),
+                    "breadth", metrics.widthCm(),
+                    "height", metrics.heightCm()
+            );
+            EkartShipmentResponse response = apiClient.createShipment(
+                    authClient.getAuthorizationHeader(context, credentials),
+                    payload
+            );
+            String trackingId = response == null ? null : response.trackingId();
+            if (!StringUtils.hasText(trackingId)) {
+                return new ShipmentProviderResponse(null, null, "EKART_SHIPMENT_CREATE_FAILED");
+            }
+            return new ShipmentProviderResponse(trackingId, trackingId, "READY_TO_SHIP");
+        } catch (RuntimeException error) {
+            return new ShipmentProviderResponse(null, null, "EKART_SHIPMENT_CREATE_FAILED");
+        }
     }
 
     @Override
