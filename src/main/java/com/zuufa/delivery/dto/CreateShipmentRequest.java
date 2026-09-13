@@ -4,6 +4,7 @@ import com.zuufa.delivery.enums.DeliveryProviderCode;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 public record CreateShipmentRequest(
@@ -13,6 +14,9 @@ public record CreateShipmentRequest(
         String currency,
         UUID warehouseId,
         Integer estimatedMinDays,
-        Integer estimatedMaxDays
+        Integer estimatedMaxDays,
+        BigDecimal subtotal,
+        List<DeliveryQuoteItemRequest> items,
+        DeliveryAddressRequest deliveryAddress
 ) {
 }
