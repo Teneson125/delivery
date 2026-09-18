@@ -31,24 +31,30 @@ public class EkartAuthClient {
     }
 
     public String getAuthorizationHeader(DeliveryProviderContext context, EkartCredentials credentials) {
-        String cacheKey = context.tenantId() + ":EKART:" + credentials.clientId();
+        if (!canAuthenticate(context)) {
+            throw new com.zuufa.exception.ServiceException(503, "Ekart API calls are disabled on this server.");
+        }
+        // Ciphertext changes whenever credentials are saved, preventing reuse after rotation.
+        String cacheKey = context.tenantId() + ":EKART:" + credentials.clientId() + ":" + fingerprint(context.encryptedCredentials());
         CachedToken cached = tokenCache.get(cacheKey);
         if (cached != null && cached.expiresAt().isAfter(Instant.now().plusSeconds(60))) {
             return cached.authorizationHeader();
         }
 
-        EkartAuthResponse response = restClientBuilder.baseUrl(properties.getBaseUrl()).build()
+        EkartAuthResponse response = restClientBuilder.clone().baseUrl(properties.getBaseUrl()).build()
                 .post()
                 .uri("/integrations/v2/auth/token/{clientId}", credentials.clientId())
                 .body(new EkartAuthRequest(credentials.username(), credentials.password()))
                 .retrieve()
                 .body(EkartAuthResponse.class);
-        if (response == null || !StringUtils.hasText(response.accessToken())) {
+        if (response == null || !StringUtils.hasText(response.accessToken()) || response.expiresIn() <= 0
+                || !"Bearer".equalsIgnoreCase(response.tokenType())) {
             throw new IllegalStateException("Ekart token response is empty");
         }
 
         String tokenType = StringUtils.hasText(response.tokenType()) ? response.tokenType() : "Bearer";
         String authorizationHeader = tokenType + " " + response.accessToken();
+        tokenCache.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(Instant.now()));
         tokenCache.put(cacheKey, new CachedToken(
                 authorizationHeader,
                 Instant.now().plusSeconds(Math.max(0, response.expiresIn()))
@@ -57,5 +63,16 @@ public class EkartAuthClient {
     }
 
     private record CachedToken(String authorizationHeader, Instant expiresAt) {
+    }
+
+    public void invalidate(java.util.UUID tenantId) {
+        tokenCache.keySet().removeIf(key -> key.startsWith(tenantId + ":EKART:"));
+    }
+
+    private String fingerprint(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
 }

@@ -88,6 +88,28 @@ public class EkartApiClient {
     }
 
     private RestClient client() {
-        return restClientBuilder.baseUrl(properties.getBaseUrl()).build();
+        return restClientBuilder.clone().baseUrl(properties.getBaseUrl()).build();
+    }
+
+    public List<com.zuufa.delivery.provider.ekart.dto.EkartAddress> addresses(String authorization) {
+        return client().get().uri("/api/v2/addresses").header(HttpHeaders.AUTHORIZATION, authorization)
+                .retrieve().body(new ParameterizedTypeReference<>() {});
+    }
+
+    public Map<String, Object> addAddress(String authorization, Map<String, Object> body) {
+        return client().post().uri("/api/v2/address").header(HttpHeaders.AUTHORIZATION, authorization)
+                .body(body).retrieve().body(new ParameterizedTypeReference<>() {});
+    }
+
+    public List<Map<String, Object>> webhooks(String authorization) {
+        return client().get().uri("/api/v2/webhook").header(HttpHeaders.AUTHORIZATION, authorization)
+                .retrieve().body(new ParameterizedTypeReference<>() {});
+    }
+
+    public Map<String, Object> saveWebhook(String authorization, String id, Map<String, Object> body) {
+        RestClient.RequestBodySpec request = id == null ? client().post().uri("/api/v2/webhook")
+                : client().put().uri("/api/v2/webhook/{id}", id);
+        return request.header(HttpHeaders.AUTHORIZATION, authorization).body(body).retrieve()
+                .body(new ParameterizedTypeReference<>() {});
     }
 }

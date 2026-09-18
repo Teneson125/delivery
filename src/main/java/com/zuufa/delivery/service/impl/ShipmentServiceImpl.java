@@ -130,6 +130,9 @@ public class ShipmentServiceImpl implements ShipmentService {
         if (shipment.isFulfillmentConfirmed() && shipment.getProvider() != DeliveryProviderCode.MANUAL) {
             throw new BadRequestException("Automated delivery status is updated by the provider");
         }
+        if (request.provider() == DeliveryProviderCode.EKART) {
+            throw new BadRequestException("Book the Ekart shipment with invoice and package details before confirming fulfillment.");
+        }
         String trackingUrl = validateTrackingUrl(request.trackingUrl());
         shipment.setProvider(request.provider());
         shipment.setFulfillmentConfirmed(true);
@@ -149,6 +152,9 @@ public class ShipmentServiceImpl implements ShipmentService {
     public ShipmentResponse updateStatus(UUID tenantId, UUID shipmentId, ShipmentStatusRequest request) {
         Shipment shipment = findShipment(tenantId, shipmentId);
         if (shipment.getProvider() != DeliveryProviderCode.MANUAL) {
+            if (!isProviderSelectable(tenantId, shipment.getProvider())) {
+                throw new BadRequestException("Delivery provider is not enabled and configured");
+            }
             throw new BadRequestException("Automated delivery status is updated by the provider");
         }
         shipment.setStatus(request.status());
@@ -208,7 +214,8 @@ public class ShipmentServiceImpl implements ShipmentService {
                             request.orderId(),
                             request.subtotal(),
                             request.items() == null ? List.of() : request.items(),
-                            request.deliveryAddress()
+                            request.deliveryAddress(),
+                            request.ekartDetails()
                     ),
                     providerContext(tenantId, shipment.getProvider())
             );
@@ -219,6 +226,9 @@ public class ShipmentServiceImpl implements ShipmentService {
             shipment.setProviderShipmentId(trimToNull(providerResponse.providerShipmentId()));
             shipment.setTrackingNumber(trimToNull(providerResponse.trackingNumber()));
             shipment.setAwbNumber(trimToNull(providerResponse.trackingNumber()));
+            if (shipment.getProvider() == DeliveryProviderCode.EKART) {
+                shipment.setTrackingUrl("https://app.elite.ekartlogistics.in/track/" + providerResponse.providerShipmentId());
+            }
             shipment.setFulfillmentConfirmed(true);
             shipment.setStatus(toShipmentStatus(providerResponse.status()));
         }
