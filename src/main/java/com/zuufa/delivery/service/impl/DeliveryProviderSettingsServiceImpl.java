@@ -29,6 +29,9 @@ public class DeliveryProviderSettingsServiceImpl implements DeliveryProviderSett
     private final DeliveryProviderConfigRepository providerConfigRepository;
     private final ObjectMapper objectMapper;
     private final EkartAuthClient ekartAuthClient;
+    private final com.zuufa.delivery.provider.ekart.EkartCredentialCipher credentialCipher;
+    private final com.zuufa.delivery.service.EkartAccountService accountService;
+    private final com.zuufa.delivery.config.EkartDeliveryProperties properties;
 
     @Override
     @Transactional(readOnly = true)
@@ -40,19 +43,40 @@ public class DeliveryProviderSettingsServiceImpl implements DeliveryProviderSett
     @Transactional
     public EkartProviderConfigResponse saveEkartConfig(UUID tenantId, EkartProviderConfigRequest request) {
         DeliveryProviderConfig config = getOrNewConfig(tenantId);
+        EkartProviderSettingsRequest previousSettings = readSettings(config.getSettingsJson());
         config.setEnabled(request.enabled());
         config.setPriority(50);
         if (request.credentials() != null) {
-            config.setEncryptedCredentials(toJson(new EkartCredentials(
+            config.setEncryptedCredentials(credentialCipher.encrypt(toJson(new EkartCredentials(
                     request.credentials().clientId().trim(),
                     request.credentials().username().trim(),
-                    request.credentials().password().trim(),
+                    request.credentials().password(),
                     trimToNull(request.credentials().merchantCode())
-            )));
+            ))));
+            ekartAuthClient.invalidate(tenantId);
+        } else if (StringUtils.hasText(config.getEncryptedCredentials()) && config.getEncryptedCredentials().stripLeading().startsWith("{")) {
+            config.setEncryptedCredentials(credentialCipher.encrypt(config.getEncryptedCredentials()));
         }
-        config.setSettingsJson(toJson(request.settings() == null
-                ? new EkartProviderSettingsRequest(null, null, "Prepaid", "SURFACE")
-                : request.settings()));
+        EkartProviderSettingsRequest settings = request.settings() == null
+                ? readSettings(config.getSettingsJson()) : request.settings();
+        String pickup = trimToNull(settings.pickupAddressAlias());
+        String returns = trimToNull(settings.returnAddressAlias());
+        String mode = StringUtils.hasText(settings.paymentMode()) ? settings.paymentMode() : "Prepaid";
+        String service = StringUtils.hasText(settings.serviceType()) ? settings.serviceType() : "SURFACE";
+        if (!java.util.Set.of("Prepaid", "COD").contains(mode) || !java.util.Set.of("SURFACE", "EXPRESS").contains(service)) {
+            throw new BadRequestException("Invalid Ekart payment mode or service type");
+        }
+        boolean changedAddresses = !java.util.Objects.equals(pickup, previousSettings.pickupAddressAlias())
+                || !java.util.Objects.equals(returns, previousSettings.returnAddressAlias()) || request.credentials() != null;
+        String pincode = changedAddresses ? null : previousSettings.pickupPincode();
+        if (request.enabled() || (changedAddresses && (pickup != null || returns != null))) {
+            var addresses = accountService.addresses(config);
+            var selected = accountService.requireAddress(addresses, pickup);
+            accountService.requireAddress(addresses, returns);
+            pincode = selected.pincode();
+            if (pincode == null || !pincode.matches("[1-9][0-9]{5}")) throw new BadRequestException("Ekart pickup address has an invalid pincode");
+        }
+        config.setSettingsJson(toJson(new EkartProviderSettingsRequest(pincode, pickup, returns, mode, service)));
         return toResponse(providerConfigRepository.save(config));
     }
 
@@ -63,8 +87,12 @@ public class DeliveryProviderSettingsServiceImpl implements DeliveryProviderSett
         if (!StringUtils.hasText(config.getEncryptedCredentials())) {
             return new ProviderConnectionTestResponse(false, "Ekart credentials are not configured.");
         }
+        if (!properties.isLiveCallsEnabled()) {
+            return new ProviderConnectionTestResponse(false, "Ekart API calls are disabled on this server.");
+        }
+        ekartAuthClient.invalidate(tenantId);
         try {
-            EkartCredentials credentials = objectMapper.readValue(config.getEncryptedCredentials(), EkartCredentials.class);
+            EkartCredentials credentials = objectMapper.readValue(credentialCipher.decrypt(config.getEncryptedCredentials()), EkartCredentials.class);
             ekartAuthClient.getAuthorizationHeader(
                     new DeliveryProviderContext(
                             tenantId,
@@ -101,14 +129,16 @@ public class DeliveryProviderSettingsServiceImpl implements DeliveryProviderSett
         return new EkartProviderConfigResponse(
                 DeliveryProviderCode.EKART,
                 config.isEnabled(),
-                credentials != null,
+                StringUtils.hasText(config.getEncryptedCredentials()),
                 credentials == null ? null : new EkartProviderCredentialsResponse(
                         mask(credentials.clientId()),
                         mask(credentials.username()),
                         "saved",
                         mask(credentials.merchantCode())
                 ),
-                readSettings(config.getSettingsJson())
+                readSettings(config.getSettingsJson()),
+                properties.isLiveCallsEnabled(), credentialCipher.configured(),
+                "AWAITING_EKART_SIGNATURE_CONTRACT"
         );
     }
 
@@ -117,20 +147,20 @@ public class DeliveryProviderSettingsServiceImpl implements DeliveryProviderSett
             return null;
         }
         try {
-            return objectMapper.readValue(value, EkartCredentials.class);
-        } catch (JsonProcessingException error) {
+            return objectMapper.readValue(credentialCipher.decrypt(value), EkartCredentials.class);
+        } catch (JsonProcessingException | RuntimeException error) {
             return null;
         }
     }
 
     private EkartProviderSettingsRequest readSettings(String value) {
         if (!StringUtils.hasText(value)) {
-            return new EkartProviderSettingsRequest(null, null, "Prepaid", "SURFACE");
+            return new EkartProviderSettingsRequest(null, null, null, "Prepaid", "SURFACE");
         }
         try {
             return objectMapper.readValue(value, EkartProviderSettingsRequest.class);
         } catch (JsonProcessingException error) {
-            return new EkartProviderSettingsRequest(null, null, "Prepaid", "SURFACE");
+            return new EkartProviderSettingsRequest(null, null, null, "Prepaid", "SURFACE");
         }
     }
 

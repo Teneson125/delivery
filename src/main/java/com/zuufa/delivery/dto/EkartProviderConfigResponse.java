@@ -7,6 +7,9 @@ public record EkartProviderConfigResponse(
         boolean enabled,
         boolean configured,
         EkartProviderCredentialsResponse credentials,
-        EkartProviderSettingsRequest settings
+        EkartProviderSettingsRequest settings,
+        boolean liveCallsEnabled,
+        boolean credentialEncryptionReady,
+        String webhookReceiverStatus
 ) {
 }

@@ -37,7 +37,7 @@ public class ShipmentController {
     }
 
     @PostMapping
-    // @RequiredPermission(CREATE_SHIPMENT)
+    @RequiredPermission(CREATE_SHIPMENT)
     public ShipmentResponse createShipment(
             @RequestHeader("X-Tenant-Id") UUID tenantId,
             @Valid @RequestBody CreateShipmentRequest request

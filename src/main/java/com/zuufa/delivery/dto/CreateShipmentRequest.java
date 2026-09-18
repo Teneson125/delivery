@@ -17,6 +17,7 @@ public record CreateShipmentRequest(
         Integer estimatedMaxDays,
         BigDecimal subtotal,
         List<DeliveryQuoteItemRequest> items,
-        DeliveryAddressRequest deliveryAddress
+        @jakarta.validation.Valid DeliveryAddressRequest deliveryAddress,
+        @jakarta.validation.Valid EkartShipmentDetails ekartDetails
 ) {
 }

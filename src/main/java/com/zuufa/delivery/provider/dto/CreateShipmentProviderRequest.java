@@ -11,6 +11,7 @@ public record CreateShipmentProviderRequest(
         UUID orderId,
         BigDecimal subtotal,
         List<DeliveryQuoteItemRequest> items,
-        DeliveryAddressRequest deliveryAddress
+        DeliveryAddressRequest deliveryAddress,
+        com.zuufa.delivery.dto.EkartShipmentDetails ekartDetails
 ) {
 }

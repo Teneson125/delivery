@@ -13,8 +13,6 @@ import com.zuufa.delivery.provider.dto.ShipmentProviderResponse;
 import com.zuufa.delivery.provider.dto.TrackShipmentProviderRequest;
 import com.zuufa.delivery.provider.dto.TrackingProviderResponse;
 import com.zuufa.delivery.provider.ekart.dto.EkartCredentials;
-import com.zuufa.delivery.provider.ekart.dto.EkartEstimateRequest;
-import com.zuufa.delivery.provider.ekart.dto.EkartEstimateResponse;
 import com.zuufa.delivery.provider.ekart.dto.EkartServiceabilityRequest;
 import com.zuufa.delivery.provider.ekart.dto.EkartServiceabilityV3Response;
 import com.zuufa.delivery.provider.ekart.dto.EkartShipmentResponse;
@@ -31,15 +29,18 @@ public class EkartDeliveryProvider implements DeliveryProvider {
     private final EkartAuthClient authClient;
     private final EkartApiClient apiClient;
     private final ObjectMapper objectMapper;
+    private final EkartCredentialCipher credentialCipher;
 
     public EkartDeliveryProvider(
             EkartAuthClient authClient,
             EkartApiClient apiClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            EkartCredentialCipher credentialCipher
     ) {
         this.authClient = authClient;
         this.apiClient = apiClient;
         this.objectMapper = objectMapper;
+        this.credentialCipher = credentialCipher;
     }
 
     @Override
@@ -56,7 +57,7 @@ public class EkartDeliveryProvider implements DeliveryProvider {
         try {
             EkartCredentials credentials = parseCredentials(context);
             EkartSettings settings = parseSettings(context);
-            String pickupPincode = firstText(settings.pickupPincode(), context.pickupPincode());
+            String pickupPincode = settings.pickupPincode();
             String dropPincode = onlyDigits(request.deliveryAddress().pincode());
             if (!StringUtils.hasText(pickupPincode) || !StringUtils.hasText(dropPincode)) {
                 return unavailable("Ekart pickup or delivery pincode is missing.");
@@ -75,7 +76,7 @@ public class EkartDeliveryProvider implements DeliveryProvider {
                             String.valueOf(metrics.weightGrams()),
                             paymentMode(settings),
                             serviceType(settings),
-                            null,
+                            "COD".equals(paymentMode(settings)) ? request.subtotal().toPlainString() : "0",
                             request.subtotal().toPlainString()
                     )
             );
@@ -83,22 +84,11 @@ public class EkartDeliveryProvider implements DeliveryProvider {
                 return unavailable("Ekart is not serviceable for this address.");
             }
 
-            EkartEstimateResponse estimate = apiClient.estimate(
-                    authorization,
-                    new EkartEstimateRequest(
-                            Integer.valueOf(onlyDigits(pickupPincode)),
-                            Integer.valueOf(dropPincode),
-                            request.subtotal(),
-                            metrics.weightGrams(),
-                            metrics.lengthCm(),
-                            metrics.heightCm(),
-                            metrics.widthCm(),
-                            serviceType(settings),
-                            null
-                    )
-            );
-            BigDecimal amount = parseAmount(estimate == null ? null : firstText(estimate.total(), estimate.shippingCharge()));
-            EkartServiceabilityV3Response firstServiceable = serviceability.getFirst();
+            EkartServiceabilityV3Response firstServiceable = serviceability.stream()
+                    .filter(option -> option.forwardDeliveredCharges() != null
+                            && StringUtils.hasText(option.forwardDeliveredCharges().totalForwardDeliveredEstimate()))
+                    .findFirst().orElseThrow(() -> new IllegalStateException("Ekart did not return a delivery rate"));
+            BigDecimal amount = parseAmount(firstServiceable.forwardDeliveredCharges().totalForwardDeliveredEstimate());
             return new DeliveryQuoteProviderResponse(
                     code(),
                     "Delivery",
@@ -123,35 +113,16 @@ public class EkartDeliveryProvider implements DeliveryProvider {
         try {
             EkartCredentials credentials = parseCredentials(context);
             EkartSettings settings = parseSettings(context);
-            String pickupAddressId = settings.pickupAddressAlias();
-            String dropPincode = request.deliveryAddress() == null ? "" : onlyDigits(request.deliveryAddress().pincode());
-            if (!StringUtils.hasText(pickupAddressId) || !StringUtils.hasText(dropPincode)) {
-                return new ShipmentProviderResponse(null, null, "EKART_SHIPMENT_DETAILS_REQUIRED");
+            Map<String, Object> payload = EkartShipmentPayload.build(request, settings);
+            String authorization = authClient.getAuthorizationHeader(context, credentials);
+            var addresses = apiClient.addresses(authorization);
+            if (addresses == null || addresses.stream().noneMatch(a -> settings.pickupAddressAlias().equals(a.alias()))
+                    || addresses.stream().noneMatch(a -> settings.returnAddressAlias().equals(a.alias()))) {
+                return new ShipmentProviderResponse(null, null, "EKART_ADDRESS_NOT_REGISTERED");
             }
-
-            PackageMetrics metrics = packageMetrics(new DeliveryQuoteProviderRequest(
-                    request.tenantId(),
-                    request.subtotal() == null ? BigDecimal.ZERO : request.subtotal(),
-                    request.items() == null ? List.of() : request.items(),
-                    request.deliveryAddress()
-            ));
-            Map<String, Object> payload = Map.of(
-                    "order_id", request.orderId().toString(),
-                    "pickup_address_id", pickupAddressId,
-                    "delivery_postal_code", dropPincode,
-                    "payment_mode", paymentMode(settings),
-                    "service_type", serviceType(settings),
-                    "weight", metrics.weightGrams(),
-                    "length", metrics.lengthCm(),
-                    "breadth", metrics.widthCm(),
-                    "height", metrics.heightCm()
-            );
-            EkartShipmentResponse response = apiClient.createShipment(
-                    authClient.getAuthorizationHeader(context, credentials),
-                    payload
-            );
+            EkartShipmentResponse response = apiClient.createShipment(authorization, payload);
             String trackingId = response == null ? null : response.trackingId();
-            if (!StringUtils.hasText(trackingId)) {
+            if (response == null || !response.status() || !StringUtils.hasText(trackingId)) {
                 return new ShipmentProviderResponse(null, null, "EKART_SHIPMENT_CREATE_FAILED");
             }
             return new ShipmentProviderResponse(trackingId, trackingId, "READY_TO_SHIP");
@@ -199,7 +170,8 @@ public class EkartDeliveryProvider implements DeliveryProvider {
 
         try {
             Map<String, Object> response = apiClient.track(request.providerShipmentId());
-            Object status = response == null ? null : response.get("status");
+            Object track = response == null ? null : response.get("track");
+            Object status = track instanceof Map<?, ?> data ? data.get("status") : null;
             return new TrackingProviderResponse(
                     status == null ? "EKART_TRACKING_RECEIVED" : status.toString(),
                     "Ekart tracking updated."
@@ -236,7 +208,7 @@ public class EkartDeliveryProvider implements DeliveryProvider {
 
     private EkartCredentials parseCredentials(DeliveryProviderContext context) {
         try {
-            EkartCredentials credentials = objectMapper.readValue(context.encryptedCredentials(), EkartCredentials.class);
+            EkartCredentials credentials = objectMapper.readValue(credentialCipher.decrypt(context.encryptedCredentials()), EkartCredentials.class);
             if (!StringUtils.hasText(credentials.clientId())
                     || !StringUtils.hasText(credentials.username())
                     || !StringUtils.hasText(credentials.password())) {
@@ -250,12 +222,12 @@ public class EkartDeliveryProvider implements DeliveryProvider {
 
     private EkartSettings parseSettings(DeliveryProviderContext context) {
         if (!StringUtils.hasText(context.settingsJson())) {
-            return new EkartSettings(null, null, "Prepaid", "SURFACE");
+            return new EkartSettings(null, null, null, "Prepaid", "SURFACE");
         }
         try {
             return objectMapper.readValue(context.settingsJson(), EkartSettings.class);
         } catch (JsonProcessingException error) {
-            return new EkartSettings(null, null, "Prepaid", "SURFACE");
+            return new EkartSettings(null, null, null, "Prepaid", "SURFACE");
         }
     }
 
@@ -284,9 +256,11 @@ public class EkartDeliveryProvider implements DeliveryProvider {
 
     private BigDecimal parseAmount(String value) {
         if (!StringUtils.hasText(value)) {
-            return BigDecimal.ZERO;
+            throw new IllegalArgumentException("Ekart did not return a rate");
         }
-        return new BigDecimal(value.trim());
+        BigDecimal amount = new BigDecimal(value.trim());
+        if (amount.signum() < 0) throw new IllegalArgumentException("Ekart returned an invalid rate");
+        return amount;
     }
 
     private String onlyDigits(String value) {
